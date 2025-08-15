@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  local-llm:
+    image: ollama/ollama:latest
+    container_name: local-llm
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "${LOCAL_LLM_HOST}:${LOCAL_LLM_PORT}:${LOCAL_LLM_INTERNAL_PORT}"
+    restart: unless-stopped
+    environment:
+      - OLLAMA_CONTEXT_LENGTH=16384  # Default context length
+    networks:
+      - maestro-network
+    # GPU support for local LLM
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0', '1']
+              capabilities: [gpu]
+
+volumes:
+  ollama-data:
