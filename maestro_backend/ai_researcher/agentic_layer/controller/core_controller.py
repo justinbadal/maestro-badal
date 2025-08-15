@@ -49,6 +49,7 @@ from ai_researcher.agentic_layer.controller.writing_manager import WritingManage
 from ai_researcher.agentic_layer.controller.reflection_manager import ReflectionManager
 from ai_researcher.agentic_layer.controller.user_interaction import UserInteractionManager
 from ai_researcher.agentic_layer.controller.report_generator import ReportGenerator
+from ai_researcher.agentic_layer.controller.chat_manager import ChatManager
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,7 @@ class AgentController:
         self.reflection_manager = ReflectionManager(self)
         self.user_interaction_manager = UserInteractionManager(self)
         self.report_generator = ReportGenerator(self)
+        self.chat_manager = ChatManager(self)
 
         logger.info(f"AgentController initialized with agents, context manager, tool registry.")
         logger.info(f"  Research Loop Settings: max_research_cycles_per_section={self.max_research_cycles_per_section}")
@@ -726,6 +728,21 @@ class AgentController:
         return await self.user_interaction_manager.handle_user_message(
             user_message, chat_history, chat_id, mission_id, log_queue, update_callback,
             use_web_search, document_group_id
+        )
+
+    async def run_chat_interaction(
+        self,
+        user_message: str,
+        document_group_id: Optional[str] = None,
+        use_web_search: bool = False,
+    ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+        """
+        Runs a direct chat interaction using the ChatManager.
+        """
+        return await self.chat_manager.run_chat_interaction(
+            user_message=user_message,
+            document_group_id=document_group_id,
+            use_web_search=use_web_search,
         )
 
     def get_final_report(self, mission_id: str) -> Optional[str]:

@@ -42,6 +42,11 @@ class ChatResponse(BaseModel):
     cost: Optional[float] = None
     updated_title: Optional[str] = None  # Updated chat title if it was changed
 
+class DirectChatRequest(BaseModel):
+    message: str
+    document_group_id: Optional[str] = None
+    use_web_search: Optional[bool] = False
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat_with_ai(
     request: ChatRequest,
@@ -257,6 +262,46 @@ async def chat_with_ai(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=error_detail
         )
+
+@router.post("/chat/direct", response_model=ChatResponse)
+async def direct_chat(
+    request: DirectChatRequest,
+    current_user: User = Depends(get_current_user_from_cookie),
+    agent_controller = Depends(get_user_specific_agent_controller),
+    db: Session = Depends(get_db)
+):
+    """
+    Handles a direct chat interaction with the AI, using RAG for context.
+    This endpoint is for simple, single-turn conversations.
+    """
+    if not agent_controller:
+        logger.error("Agent controller not initialized")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI chat service is not available. Please try again later."
+        )
+
+    try:
+        response_text, model_details = await agent_controller.run_chat_interaction(
+            user_message=request.message,
+            document_group_id=request.document_group_id,
+            use_web_search=request.use_web_search,
+        )
+
+        return ChatResponse(
+            response=response_text,
+            model_used=model_details.get("model_name") if model_details else None,
+            provider=model_details.get("provider") if model_details else None,
+            cost=model_details.get("cost") if model_details else None,
+        )
+
+    except Exception as e:
+        logger.error(f"Error processing direct chat request: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while processing your message."
+        )
+
 
 # Additional endpoints for research flow actions
 class QuestionGenerationRequest(BaseModel):

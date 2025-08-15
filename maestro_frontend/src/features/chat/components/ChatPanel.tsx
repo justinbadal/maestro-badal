@@ -39,6 +39,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ chatId: propChatId }) => {
   const [documentGroups, setDocumentGroups] = useState<DocumentGroup[]>([])
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
   const [useWebSearch, setUseWebSearch] = useState<boolean>(true)
+  const [chatMode, setChatMode] = useState<'research' | 'direct'>('research')
   const [showMissionSettings, setShowMissionSettings] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { addToast } = useToast()
@@ -126,109 +127,56 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ chatId: propChatId }) => {
   const handleSendMessage = async () => {
     if (!message.trim() || isLoading) return
 
-    // Validate that at least one information source is enabled
-    if (!useWebSearch && !selectedGroupId) {
-      addToast({
-        type: 'error',
-        title: 'No Information Source',
-        message: 'Please enable web search or select a document group before sending your message.',
-        duration: 5000
-      })
-      return
-    }
+    if (chatMode === 'direct') {
+      // Direct chat logic
+      const userMessage = message.trim()
+      setMessage('')
+      setIsLoading(true)
 
-    let targetChatId = activeChat?.id;
+      let targetChatId = activeChat?.id;
 
-    // If no active chat, this is the first message of a new chat.
-    const isFirstMessageInNewChat = !targetChatId;
-
-    if (isFirstMessageInNewChat) {
-      try {
-        const newChat = await createChat();
-        targetChatId = newChat.id;
-        setActiveChat(newChat.id); // Immediately set the new chat as active
-      } catch (error) {
-        console.error('Failed to create chat:', error);
-        setIsLoading(false);
-        return;
+      if (!targetChatId) {
+        try {
+          const newChat = await createChat();
+          targetChatId = newChat.id;
+          setActiveChat(newChat.id);
+        } catch (error) {
+          console.error('Failed to create chat:', error);
+          setIsLoading(false);
+          return;
+        }
       }
-    }
-
-    // This check is now more robust.
-    const isFirstMessage = isFirstMessageInNewChat || (currentChat?.messages.length === 0);
-
-    const userMessage = message.trim()
-    setMessage('')
-    setIsLoading(true)
-
-    // Add user message
-    if (targetChatId) {
-      try {
-        await addMessage(targetChatId, {
-          content: userMessage,
-          role: 'user'
-        })
-      } catch (error) {
-        console.error('Failed to add user message:', error)
-        setIsLoading(false)
-        return
-      }
-    }
-
-    try {
-      // Auto-generate chat title from first message
-      if (isFirstMessage && targetChatId) {
-        const title = userMessage.length > 50 
-          ? userMessage.substring(0, 50) + '...'
-          : userMessage
-        updateChatTitle(targetChatId, title)
-      }
-
-      // Refetch the chat from the store to ensure we have the latest state
-      const updatedCurrentChat = useChatStore.getState().chats.find(c => c.id === targetChatId);
-
-      // Get conversation history for API call
-      const conversationHistory = updatedCurrentChat?.messages.map(msg => ({
-        role: msg.role,
-        content: msg.content
-      })) || []
-
-      // Call the MessengerAgent-integrated chat API using apiClient for proper auth
-      const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CHAT.SEND), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
-        },
-        credentials: 'include', // Include cookies for authentication
-        body: JSON.stringify({
-          message: userMessage,
-          chat_id: targetChatId,
-          conversation_history: conversationHistory,
-          mission_id: updatedCurrentChat?.missionId || null, // Pass existing mission ID if available
-          document_group_id: selectedGroupId,
-          use_web_search: useWebSearch
-        })
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        
-        // Handle structured error responses from backend
-        if (errorData.detail && typeof errorData.detail === 'object') {
-          const { error, message } = errorData.detail
-          
-          // Show toast notification with detailed error
-          addToast({
-            type: 'error',
-            title: error || 'Chat Error',
-            message: message || 'An error occurred while processing your message.',
-            duration: 8000 // Show longer for errors
+      
+      if (targetChatId) {
+        try {
+          await addMessage(targetChatId, {
+            content: userMessage,
+            role: 'user'
           })
-          
-          throw new Error(message || 'Failed to process message')
-        } else {
-          // Handle simple error responses
+        } catch (error) {
+          console.error('Failed to add user message:', error)
+          setIsLoading(false)
+          return
+        }
+      }
+
+      try {
+        const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CHAT.DIRECT), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            message: userMessage,
+            document_group_id: selectedGroupId,
+            use_web_search: useWebSearch
+          })
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
           const errorMessage = errorData.detail || `HTTP ${response.status}: ${response.statusText}`
           addToast({
             type: 'error',
@@ -238,51 +186,175 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ chatId: propChatId }) => {
           })
           throw new Error(errorMessage)
         }
+
+        const data = await response.json()
+        
+        if (targetChatId) {
+          addMessage(targetChatId, {
+            content: data.response,
+            role: 'assistant'
+          })
+        }
+        
+        setIsLoading(false)
+
+      } catch (error) {
+        console.error('Error sending message:', error)
+        if (targetChatId) {
+          addMessage(targetChatId, {
+            content: 'Sorry, I encountered an error. Please try again.',
+            role: 'assistant'
+          })
+        }
+        setIsLoading(false)
       }
 
-      const data = await response.json()
-      
+    } else {
+      // Research mode logic (existing code)
+      if (!useWebSearch && !selectedGroupId) {
+        addToast({
+          type: 'error',
+          title: 'No Information Source',
+          message: 'Please enable web search or select a document group before sending your message.',
+          duration: 5000
+        })
+        return
+      }
+
+      let targetChatId = activeChat?.id;
+
+      const isFirstMessageInNewChat = !targetChatId;
+
+      if (isFirstMessageInNewChat) {
+        try {
+          const newChat = await createChat();
+          targetChatId = newChat.id;
+          setActiveChat(newChat.id);
+        } catch (error) {
+          console.error('Failed to create chat:', error);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      const isFirstMessage = isFirstMessageInNewChat || (currentChat?.messages.length === 0);
+
+      const userMessage = message.trim()
+      setMessage('')
+      setIsLoading(true)
+
       if (targetChatId) {
-        // Add AI response
-        addMessage(targetChatId, {
-          content: data.response,
-          role: 'assistant'
+        try {
+          await addMessage(targetChatId, {
+            content: userMessage,
+            role: 'user'
+          })
+        } catch (error) {
+          console.error('Failed to add user message:', error)
+          setIsLoading(false)
+          return
+        }
+      }
+
+      try {
+        if (isFirstMessage && targetChatId) {
+          const title = userMessage.length > 50 
+            ? userMessage.substring(0, 50) + '...'
+            : userMessage
+          updateChatTitle(targetChatId, title)
+        }
+
+        const updatedCurrentChat = useChatStore.getState().chats.find(c => c.id === targetChatId);
+
+        const conversationHistory = updatedCurrentChat?.messages.map(msg => ({
+          role: msg.role,
+          content: msg.content
+        })) || []
+
+        const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CHAT.SEND), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            message: userMessage,
+            chat_id: targetChatId,
+            conversation_history: conversationHistory,
+            mission_id: updatedCurrentChat?.missionId || null,
+            document_group_id: selectedGroupId,
+            use_web_search: useWebSearch
+          })
         })
 
-        // Update chat title if it was changed by the backend
-        if (data.updated_title) {
-          updateChatTitle(targetChatId, data.updated_title)
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          
+          if (errorData.detail && typeof errorData.detail === 'object') {
+            const { error, message } = errorData.detail
+            
+            addToast({
+              type: 'error',
+              title: error || 'Chat Error',
+              message: message || 'An error occurred while processing your message.',
+              duration: 8000
+            })
+            
+            throw new Error(message || 'Failed to process message')
+          } else {
+            const errorMessage = errorData.detail || `HTTP ${response.status}: ${response.statusText}`
+            addToast({
+              type: 'error',
+              title: 'Chat Error',
+              message: errorMessage,
+              duration: 8000
+            })
+            throw new Error(errorMessage)
+          }
         }
 
-        // Handle MessengerAgent actions
-        if (data.action) {
-          await handleAgentAction(data.action, data.request, data.mission_id, targetChatId)
+        const data = await response.json()
+        
+        if (targetChatId) {
+          addMessage(targetChatId, {
+            content: data.response,
+            role: 'assistant'
+          })
+
+          if (data.updated_title) {
+            updateChatTitle(targetChatId, data.updated_title)
+          }
+
+          if (data.action) {
+            await handleAgentAction(data.action, data.request, data.mission_id, targetChatId)
+          }
         }
-      }
-      
-      setIsLoading(false)
-      
-    } catch (error) {
-      console.error('Error sending message:', error)
-      let errorMessage = 'Sorry, I encountered an error while processing your message. Please try again.'
-      
-      if (error instanceof Error) {
-        if (error.message.includes('503')) {
-          errorMessage = 'The AI service is currently unavailable. Please try again in a moment.'
-        } else if (error.message.includes('401')) {
-          errorMessage = 'Your session has expired. Please refresh the page and log in again.'
-        } else if (error.message.includes('Failed to fetch')) {
-          errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.'
+        
+        setIsLoading(false)
+        
+      } catch (error) {
+        console.error('Error sending message:', error)
+        let errorMessage = 'Sorry, I encountered an error while processing your message. Please try again.'
+        
+        if (error instanceof Error) {
+          if (error.message.includes('503')) {
+            errorMessage = 'The AI service is currently unavailable. Please try again in a moment.'
+          } else if (error.message.includes('401')) {
+            errorMessage = 'Your session has expired. Please refresh the page and log in again.'
+          } else if (error.message.includes('Failed to fetch')) {
+            errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.'
+          }
         }
+        
+        if (targetChatId) {
+          addMessage(targetChatId, {
+            content: errorMessage,
+            role: 'assistant'
+          })
+        }
+        setIsLoading(false)
       }
-      
-      if (targetChatId) {
-        addMessage(targetChatId, {
-          content: errorMessage,
-          role: 'assistant'
-        })
-      }
-      setIsLoading(false)
     }
   }
 
@@ -682,6 +754,27 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ chatId: propChatId }) => {
                       </button>
                       <span className={`text-xs ${useWebSearch ? 'text-primary' : 'text-muted-foreground'}`}>
                         {useWebSearch ? 'On' : 'Off'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-1.5">
+                      <label className="text-xs text-muted-foreground whitespace-nowrap">Chat Mode:</label>
+                      <button
+                        type="button"
+                        onClick={() => setChatMode(chatMode === 'research' ? 'direct' : 'research')}
+                        disabled={isChatDisabled}
+                        className={`relative inline-flex h-3.5 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
+                          chatMode === 'direct' ? 'bg-primary' : 'bg-secondary'
+                        } ${isChatDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                      >
+                        <span
+                          className={`inline-block h-2 w-5 transform rounded-full bg-white transition-transform ${
+                            chatMode === 'direct' ? 'translate-x-6' : 'translate-x-0.5'
+                          }`}
+                        />
+                      </button>
+                      <span className={`text-xs ${chatMode === 'direct' ? 'text-primary' : 'text-muted-foreground'}`}>
+                        {chatMode === 'direct' ? 'Direct' : 'Research'}
                       </span>
                     </div>
 

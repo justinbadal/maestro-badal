@@ -16,6 +16,7 @@ export const API_CONFIG = {
     },
     CHAT: {
       SEND: '/api/chat',
+      DIRECT: '/api/chat/direct',
       STATUS: '/api/chat/status',
     },
     CHATS: {
