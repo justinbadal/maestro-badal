@@ -77,10 +77,13 @@ class SearchSettings(BaseModel):
     provider: str
     tavily_api_key: Optional[str] = None
     linkup_api_key: Optional[str] = None
+    jina_api_key: Optional[str] = None
     searxng_base_url: Optional[str] = None
     searxng_categories: Optional[str] = None
     max_results: Optional[int] = None
     search_depth: Optional[str] = None
+    source_preferences: Optional[str] = None  # Comma-separated: academic,general,news,technical,medical,legal,social_media,reddit,mixed
+    search_date_range: Optional[str] = None  # last_week, last_month, last_year, 2023-2024, etc.
 
 class ResearchParameters(BaseModel):
     initial_research_max_depth: int

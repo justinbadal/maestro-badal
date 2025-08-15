@@ -5,6 +5,7 @@ Tools module for the agentic layer.
 from .calculator_tool import CalculatorTool
 from .document_search import DocumentSearchTool
 from .file_reader_tool import FileReaderTool
+from .jina_search_tool import JinaSearchTool
 from .python_tool import PythonTool
 from .reference_integration_tool import ReferenceIntegrationTool
 from .structured_document_tool import StructuredDocumentTool
@@ -15,6 +16,7 @@ __all__ = [
     "CalculatorTool",
     "DocumentSearchTool",
     "FileReaderTool",
+    "JinaSearchTool",
     "PythonTool",
     "ReferenceIntegrationTool",
     "StructuredDocumentTool",

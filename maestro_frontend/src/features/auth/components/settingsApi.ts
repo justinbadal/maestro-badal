@@ -30,11 +30,14 @@ export interface AISettings {
 }
 
 export interface SearchSettings {
-  provider: 'tavily' | 'linkup' | 'searxng'
+  provider: 'tavily' | 'linkup' | 'searxng' | 'jina'
   tavily_api_key: string | null
   linkup_api_key: string | null
+  jina_api_key: string | null
   searxng_base_url: string | null
   searxng_categories: string | null
+  source_preferences?: string  // Comma-separated values
+  search_date_range?: string
 }
 
 export interface ResearchParameters {

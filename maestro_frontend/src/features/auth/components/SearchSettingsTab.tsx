@@ -24,10 +24,37 @@ const SEARXNG_CATEGORIES = [
   { value: 'social media', label: 'Social Media' }
 ]
 
+// Source preference options
+const SOURCE_PREFERENCES = [
+  { value: 'academic', label: 'Academic Papers', description: 'Academic papers, research studies, and scholarly articles' },
+  { value: 'general', label: 'General Web', description: 'General web content without specific source filtering' },
+  { value: 'news', label: 'News Articles', description: 'News articles and journalistic content' },
+  { value: 'technical', label: 'Technical Docs', description: 'Technical documentation, guides, and specifications' },
+  { value: 'medical', label: 'Medical Research', description: 'Medical research, clinical studies, and health information' },
+  { value: 'legal', label: 'Legal Documents', description: 'Legal documents, court cases, and legal analysis' },
+  { value: 'social_media', label: 'Social Media', description: 'Social media posts, discussions, and community content' },
+  { value: 'reddit', label: 'Reddit', description: 'Reddit discussions, threads, and community insights' },
+  { value: 'mixed', label: 'Mixed Sources', description: 'No automatic enhancement, let queries stand as-is' }
+]
+
+// Date range options
+const DATE_RANGE_OPTIONS = [
+  { value: 'any_time', label: 'Any Time' },
+  { value: 'last_week', label: 'Past Week' },
+  { value: 'last_month', label: 'Past Month' },
+  { value: 'last_3_months', label: 'Past 3 Months' },
+  { value: 'last_6_months', label: 'Past 6 Months' },
+  { value: 'last_year', label: 'Past Year' },
+  { value: 'last_2_years', label: 'Past 2 Years' },
+  { value: '2024', label: '2024' },
+  { value: '2023', label: '2023' },
+  { value: '2022', label: '2022' }
+]
+
 export const SearchSettingsTab: React.FC = () => {
   const { draftSettings, setDraftSettings } = useSettingsStore()
 
-  const handleProviderChange = (provider: 'tavily' | 'linkup' | 'searxng') => {
+  const handleProviderChange = (provider: 'tavily' | 'linkup' | 'searxng' | 'jina') => {
     if (!draftSettings) return
     
     const newSearch = {
@@ -87,6 +114,50 @@ export const SearchSettingsTab: React.FC = () => {
     return `${selected.length} categories selected`
   }
 
+  const getSelectedSourcePreferences = (): string[] => {
+    const preferences = draftSettings?.search?.source_preferences
+    if (!preferences || preferences === '') return ['academic']
+    return preferences.split(',').map(p => p.trim()).filter(p => p)
+  }
+
+  const getSelectedSourcePreferencesDisplay = (): string => {
+    const selected = getSelectedSourcePreferences()
+    if (selected.length === 0) return 'Select source types'
+    if (selected.length === 1) return SOURCE_PREFERENCES.find(p => p.value === selected[0])?.label || selected[0]
+    return `${selected.length} source types selected`
+  }
+
+  const handleSourcePreferenceChange = (preferenceValue: string, checked: boolean) => {
+    if (!draftSettings?.search) return
+    
+    const currentPreferences = getSelectedSourcePreferences()
+    
+    let newPreferencesArray
+    if (checked) {
+      // Add preference if not already included
+      if (!currentPreferences.includes(preferenceValue)) {
+        newPreferencesArray = [...currentPreferences, preferenceValue]
+      } else {
+        newPreferencesArray = currentPreferences
+      }
+    } else {
+      // Remove preference
+      newPreferencesArray = currentPreferences.filter(p => p !== preferenceValue)
+    }
+    
+    // Ensure at least one preference is selected
+    if (newPreferencesArray.length === 0) {
+      newPreferencesArray = ['general']
+    }
+    
+    const newSearch = {
+      ...draftSettings.search,
+      source_preferences: newPreferencesArray.join(',')
+    }
+    
+    setDraftSettings({ search: newSearch })
+  }
+
   if (!draftSettings) {
     return <div>Loading...</div>
   }
@@ -118,6 +189,7 @@ export const SearchSettingsTab: React.FC = () => {
                   <SelectItem value="tavily">Tavily</SelectItem>
                   <SelectItem value="linkup">LinkUp</SelectItem>
                   <SelectItem value="searxng">SearXNG</SelectItem>
+                  <SelectItem value="jina">Jina.ai</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -263,12 +335,135 @@ export const SearchSettingsTab: React.FC = () => {
                 </p>
               </div>
             )}
+
+            {draftSettings.search.provider === 'jina' && (
+              <div className="space-y-3 pl-3 border-l-2 border-orange-200 bg-orange-50/30 rounded-r-lg p-3">
+                <p className="text-xs text-muted-foreground-foreground mb-2">
+                  AI-powered search with grounding capabilities and rich snippets for enhanced research.
+                </p>
+                <div className="space-y-1.5">
+                  <Label htmlFor="jina-api-key" className="text-sm">Jina.ai API Key</Label>
+                  <Input
+                    id="jina-api-key"
+                    type="password"
+                    value={draftSettings.search.jina_api_key || ''}
+                    onChange={(e) => handleApiKeyChange('jina_api_key', e.target.value)}
+                    placeholder="jina_..."
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Get your API key from{' '}
+                  <a 
+                    href="https://jina.ai/api-dashboard/" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-orange-600 hover:underline"
+                  >
+                    Jina.ai Dashboard
+                  </a>
+                  {' '}· Free tier includes 1M tokens
+                </p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Source Preferences Configuration */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            Source Preferences
+          </CardTitle>
+          <CardDescription className="text-sm">
+            Configure what types of sources to prioritize in search results.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Preferred Source Types</Label>
+            <div className="relative">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="h-9 w-full justify-between text-sm"
+                  >
+                    {getSelectedSourcePreferencesDisplay()}
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-full p-0" align="start">
+                  <div className="p-3">
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Select one or more source types to prioritize:
+                    </p>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {SOURCE_PREFERENCES.map((preference) => {
+                        const isSelected = getSelectedSourcePreferences().includes(preference.value)
+                        return (
+                          <DropdownMenuItem
+                            key={preference.value}
+                            className="flex flex-col items-start space-y-1 cursor-pointer p-3 min-h-[60px]"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              handleSourcePreferenceChange(preference.value, !isSelected)
+                            }}
+                          >
+                            <div className="flex items-center space-x-2 w-full">
+                              <Checkbox
+                                id={`source-${preference.value}`}
+                                checked={isSelected}
+                                onCheckedChange={() => {}} // Prevent direct checkbox interaction
+                              />
+                              <Label
+                                htmlFor={`source-${preference.value}`}
+                                className="text-sm font-medium cursor-pointer"
+                              >
+                                {preference.label}
+                              </Label>
+                            </div>
+                            <p className="text-xs text-muted-foreground ml-6">
+                              {preference.description}
+                            </p>
+                          </DropdownMenuItem>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+          
+          <div className="space-y-1.5">
+            <Label htmlFor="date-range" className="text-sm font-medium">Time Range</Label>
+            <Select
+              value={draftSettings.search.search_date_range || 'any_time'}
+              onValueChange={(value) => handleApiKeyChange('search_date_range', value === 'any_time' ? '' : value)}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Select time range" />
+              </SelectTrigger>
+              <SelectContent>
+                {DATE_RANGE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Limit search results to content from a specific time period.
+            </p>
           </div>
         </CardContent>
       </Card>
 
       {/* Provider-specific search configuration */}
-      {(draftSettings.search.provider === 'tavily' || draftSettings.search.provider === 'linkup') && (
+      {(draftSettings.search.provider === 'tavily' || draftSettings.search.provider === 'linkup' || draftSettings.search.provider === 'jina') && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -276,7 +471,11 @@ export const SearchSettingsTab: React.FC = () => {
               Search Configuration
             </CardTitle>
             <CardDescription className="text-sm">
-              Configure search behavior and parameters for {draftSettings.search.provider === 'tavily' ? 'Tavily' : 'LinkUp'}.
+              Configure search behavior and parameters for {
+                draftSettings.search.provider === 'tavily' ? 'Tavily' : 
+                draftSettings.search.provider === 'linkup' ? 'LinkUp' :
+                draftSettings.search.provider === 'jina' ? 'Jina.ai' : 'your search provider'
+              }.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -315,6 +514,11 @@ export const SearchSettingsTab: React.FC = () => {
                         <SelectItem value="standard">Standard (Basic - 1 credit)</SelectItem>
                         <SelectItem value="advanced">Advanced (2 credits)</SelectItem>
                       </>
+                    ) : draftSettings.search.provider === 'jina' ? (
+                      <>
+                        <SelectItem value="standard">Standard (Fast)</SelectItem>
+                        <SelectItem value="advanced">Enhanced (With grounding)</SelectItem>
+                      </>
                     ) : (
                       <>
                         <SelectItem value="standard">Standard (Fast)</SelectItem>
@@ -326,6 +530,8 @@ export const SearchSettingsTab: React.FC = () => {
                 <p className="text-xs text-muted-foreground">
                   {draftSettings.search.provider === 'tavily' 
                     ? 'Advanced search provides more comprehensive results but costs 2x API credits.'
+                    : draftSettings.search.provider === 'jina'
+                    ? 'Enhanced search includes grounding data and rich snippets for better research quality.'
                     : 'Deep search uses an agentic workflow for more comprehensive results but takes longer.'}
                 </p>
               </div>

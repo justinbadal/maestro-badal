@@ -31,13 +31,16 @@ interface AISettings {
 }
 
 interface SearchSettings {
-  provider: 'tavily' | 'linkup' | 'searxng'
+  provider: 'tavily' | 'linkup' | 'searxng' | 'jina'
   tavily_api_key: string | null
   linkup_api_key: string | null
+  jina_api_key: string | null
   searxng_base_url: string | null
   searxng_categories: string | null
   max_results?: number
   search_depth?: 'standard' | 'advanced'
+  source_preferences?: string  // Comma-separated values
+  search_date_range?: string
 }
 
 export interface ResearchParameters {
@@ -231,10 +234,13 @@ const defaultSettings: UserSettings = {
     provider: 'linkup',
     tavily_api_key: null,
     linkup_api_key: null,
+    jina_api_key: null,
     searxng_base_url: null,
     searxng_categories: null,
     max_results: 5,
-    search_depth: 'standard'
+    search_depth: 'standard',
+    source_preferences: 'academic',
+    search_date_range: 'any_time'
   },
   research_parameters: {
     initial_research_max_depth: 2,

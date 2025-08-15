@@ -153,6 +153,18 @@ def get_linkup_api_key(mission_id: Optional[str] = None) -> Optional[str]:
     # Fallback to environment variable
     return os.getenv("LINKUP_API_KEY")
 
+def get_jina_api_key(mission_id: Optional[str] = None) -> Optional[str]:
+    """Get the Jina.ai API key from user settings or environment."""
+    # Check user settings first
+    user_settings = get_user_settings()
+    if user_settings:
+        search_settings = user_settings.get("search", {})
+        if search_settings and search_settings.get("jina_api_key"):
+            return search_settings["jina_api_key"]
+    
+    # Fallback to environment variable
+    return os.getenv("JINA_API_KEY")
+
 def get_searxng_base_url(mission_id: Optional[str] = None) -> Optional[str]:
     """Get the SearXNG base URL from user settings or environment."""
     # Check user settings first
@@ -210,6 +222,32 @@ def get_search_depth(mission_id: Optional[str] = None) -> str:
     
     # Fallback to environment variable then default
     return os.getenv("SEARCH_DEPTH", "standard")
+
+def get_source_preferences(mission_id: Optional[str] = None) -> str:
+    """Get the source preferences (comma-separated) from user settings or environment."""
+    # Check user settings first
+    user_settings = get_user_settings()
+    if user_settings:
+        search_settings = user_settings.get("search", {})
+        if search_settings and search_settings.get("source_preferences"):
+            preferences = search_settings["source_preferences"]
+            return preferences
+    
+    # Fallback to environment variable then default
+    return os.getenv("SEARCH_SOURCE_PREFERENCES", "academic")
+
+def get_search_date_range(mission_id: Optional[str] = None) -> Optional[str]:
+    """Get the search date range from user settings or environment."""
+    # Check user settings first
+    user_settings = get_user_settings()
+    if user_settings:
+        search_settings = user_settings.get("search", {})
+        if search_settings and search_settings.get("search_date_range"):
+            date_range = search_settings["search_date_range"]
+            return date_range
+    
+    # Fallback to environment variable
+    return os.getenv("SEARCH_DATE_RANGE")
 
 # --- AI Provider Settings ---
 def get_ai_provider_config(provider_name: str, mission_id: Optional[str] = None) -> Dict[str, Any]:

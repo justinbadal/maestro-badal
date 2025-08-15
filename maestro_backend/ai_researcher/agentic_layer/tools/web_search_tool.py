@@ -7,8 +7,8 @@ from datetime import datetime
 
 # Import dynamic config to access user-specific provider settings
 from ai_researcher.dynamic_config import (
-    get_web_search_provider, get_tavily_api_key, get_linkup_api_key, get_searxng_base_url, get_searxng_categories,
-    get_search_max_results, get_search_depth
+    get_web_search_provider, get_tavily_api_key, get_linkup_api_key, get_jina_api_key, get_searxng_base_url, get_searxng_categories,
+    get_search_max_results, get_search_depth, get_source_preferences, get_search_date_range
 )
 
 logger = logging.getLogger(__name__)
@@ -97,6 +97,17 @@ class WebSearchTool:
                 self.client = base_url.rstrip('/')  # Store the base URL as the "client"
                 self.api_key_configured = True
                 logger.info("WebSearchTool initialized with SearXNG.")
+            elif self.provider == "jina":
+                if not requests:
+                    raise ImportError("Jina.ai provider selected, but 'requests' library not installed.")
+                api_key = get_jina_api_key()
+                if not api_key:
+                    logger.warning("Jina.ai API key not configured in user settings or environment variables.")
+                    self.api_key_configured = False
+                    return
+                self.client = api_key  # Store the API key as the "client"
+                self.api_key_configured = True
+                logger.info("WebSearchTool initialized with Jina.ai.")
             else:
                 raise ValueError(f"Unsupported web search provider configured: {self.provider}")
         except Exception as e:
@@ -175,10 +186,13 @@ class WebSearchTool:
         formatted_results = []
         error_msg = None
 
-        # Only add academic suffix if it's not already in the query
-        search_query = query
-        if "academic" not in query.lower() and "paper" not in query.lower():
-            search_query = query + " academic paper"
+        # Enhance query based on user's source preferences and date range
+        from .search_query_enhancer import SearchQueryEnhancer
+        source_preferences = get_source_preferences(mission_id)
+        date_range = get_search_date_range(mission_id)
+        search_query = SearchQueryEnhancer.enhance_query(query, source_preferences, date_range)
+        
+        logger.debug(f"Enhanced query based on '{source_preferences}' preferences and '{date_range}' date range: '{query}' -> '{search_query}'")
 
         try:
             if self.provider == "tavily":
@@ -298,6 +312,52 @@ class WebSearchTool:
                         "snippet": result.get('content', 'No Snippet'),
                         "url": result.get('url', '#')
                     })
+
+            elif self.provider == "jina":
+                # Jina.ai search using requests
+                headers = {
+                    "Authorization": f"Bearer {self.client}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                }
+                
+                # Add optional headers for enhanced functionality
+                if include_domains and len(include_domains) == 1:
+                    headers["X-Site"] = include_domains[0]
+                
+                # Build request payload
+                payload = {
+                    "q": search_query,
+                    "num": max_results
+                }
+                
+                # Make the API request
+                response = requests.post(
+                    "https://s.jina.ai/",
+                    json=payload,
+                    headers=headers,
+                    timeout=30
+                )
+                
+                response.raise_for_status()
+                search_data = response.json()
+                search_results = search_data.get('data', [])
+                
+                # Process and format results
+                for result in search_results:
+                    formatted_result = {
+                        "title": result.get('title', 'No Title'),
+                        "snippet": result.get('content', result.get('description', 'No Snippet')),
+                        "url": result.get('url', '#')
+                    }
+                    
+                    # Add enhanced metadata if available
+                    if 'grounding_score' in result:
+                        formatted_result['grounding_score'] = result['grounding_score']
+                    if 'snippet_data' in result:
+                        formatted_result['snippet_data'] = result['snippet_data']
+                    
+                    formatted_results.append(formatted_result)
 
             if error_msg:
                  return {"error": error_msg}
